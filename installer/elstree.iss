@@ -5,7 +5,7 @@
 
 [Setup]
 
-AppId={}
+AppId={{8d82f419-0389-4c7e-b6ac-50004e06ff6c}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
@@ -45,9 +45,10 @@ WelcomeLabel2=This wizard will install elstree on your computer.%n%nClick Next t
 
 
 [Tasks]
-Name: "addtopath"; Description: "Add elstree to PATH"; GroupDescription: "Additional options:"; Flags: unchecked
+Name: "addtopath"; Description: "Add elstree to PATH"; GroupDescription: "Additional options:"
 
 [Code]
+
 function NeedsAddPath(Param: string): Boolean;
 var
     OrigPath: string;
@@ -91,6 +92,98 @@ begin
                 Result := Result + ';';
 
             Result := Result + Part;
+        end;
+    end;
+end;
+
+procedure AddPathEntry(Entry: String);
+var
+    CurrentPath: String;
+begin
+    if not RegQueryStringValue(
+        HKEY_CURRENT_USER, 'Environment', 'Path', CurrentPath
+    ) then
+        CurrentPath := '';
+
+    if NeedsAddPath(Entry) then
+    begin
+        if CurrentPath <> '' then
+            CurrentPath := CurrentPath + ';';
+
+        CurrentPath := CurrentPath + Entry;
+
+        RegWriteStringValue(
+            HKEY_CURRENT_USER, 'Environment', 'Path', CurrentPath
+        );
+    end;
+end;
+
+procedure DeletePathEntry(Entry: String);
+var
+    CurrentPath: String;
+begin
+    if RegQueryStringValue(
+        HKEY_CURRENT_USER, 'Environment', 'Path', CurrentPath
+    ) then
+    begin
+        CurrentPath := RemovePathEntry(CurrentPath, Entry);
+
+        RegWriteStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', CurrentPath);
+
+    end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+    Entry: String;
+begin
+    if CurStep = ssPostInstall then
+    begin
+        if WizardIsTaskSelected('addtopath') then
+        begin
+
+            Entry := ExpandConstant('{app}');
+
+            if NeedsAddPath(Entry) then
+            begin
+                AddPathEntry(Entry);
+
+                RegWriteStringValue(
+                    HKEY_CURRENT_USER,
+                    'Software\elstree',
+                    'PathEntryAdded',
+                    Entry
+                );
+            end;
+        end;
+    end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+    Entry: String;
+begin
+    if CurUninstallStep = usUninstall then
+    begin
+        if RegQueryStringValue(
+            HKEY_CURRENT_USER,
+            'Software\elstree',
+            'PathEntryAdded',
+            Entry
+        ) then
+        begin
+            DeletePathEntry(Entry);
+
+            RegDeleteValue(
+                HKEY_CURRENT_USER,
+                'Software\elstree',
+                'PathEntryAdded'
+            );
+
+            RegDeleteKeyIfEmpty(
+                HKEY_CURRENT_USER,
+                'Software\elstree'
+            );
         end;
     end;
 end;
